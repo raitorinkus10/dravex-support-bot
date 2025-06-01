@@ -13,6 +13,7 @@ from telegram.ext import (
 import sqlite3
 from uuid import uuid4
 import logging
+import traceback
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
@@ -307,19 +308,41 @@ init_db()
 
 # Flask-роут для вебхука
 @app.route("/webhook", methods=["POST"])
-async def webhook():
-    update = Update.de_json(request.get_json(force=True), application.bot)
-    await application.process_update(update)
-    return "OK"
+def webhook():
+    try:
+        logger.info("Received webhook request")
+        data = request.get_json(force=True)
+        logger.info(f"Webhook data: {data}")
+        update = Update.de_json(data, application.bot)
+        if update is None:
+            logger.error("Failed to parse update from webhook data")
+            return "Failed to parse update", 400
+        # Используем run_async для асинхронной обработки
+        from telegram.ext import ApplicationHandlerStop
+        loop = application.loop or asyncio.get_event_loop()
+        loop.run_until_complete(application.process_update(update))
+        logger.info("Webhook processed successfully")
+        return "OK"
+    except Exception as e:
+        logger.error(f"Error in webhook: {str(e)}")
+        logger.error(traceback.format_exc())
+        return "Error", 500
 
 # Установка вебхука при запуске
 @app.route("/set_webhook", methods=["GET"])
-async def set_webhook():
-    webhook_url = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME')}/webhook"
-    success = await application.bot.set_webhook(webhook_url)
-    if success:
-        logger.info(f"Webhook set to {webhook_url}")
-        return "Webhook set"
-    else:
-        logger.error("Failed to set webhook")
-        return "Failed to set webhook"
+def set_webhook():
+    try:
+        webhook_url = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME')}/webhook"
+        logger.info(f"Setting webhook to {webhook_url}")
+        # Используем синхронный вызов для WSGI
+        success = application.bot.set_webhook(webhook_url)
+        if success:
+            logger.info(f"Webhook set to {webhook_url}")
+            return "Webhook set"
+        else:
+            logger.error("Failed to set webhook")
+            return "Failed to set webhook"
+    except Exception as e:
+        logger.error(f"Error setting webhook: {str(e)}")
+        logger.error(traceback.format_exc())
+        return "Error setting webhook", 500
