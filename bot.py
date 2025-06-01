@@ -13,7 +13,6 @@ from telegram.ext import (
 import sqlite3
 from uuid import uuid4
 import logging
-import asyncio
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
@@ -324,8 +323,3 @@ async def set_webhook():
     else:
         logger.error("Failed to set webhook")
         return "Failed to set webhook"
-
-# Запуск Flask приложения
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8080))
-    app.run(host="0.0.0.0", port=port)
