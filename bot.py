@@ -9,12 +9,11 @@ from telegram.ext import (
     ConversationHandler,
     filters,
     ContextTypes,
-    Dispatcher,
 )
 import sqlite3
 from uuid import uuid4
-import threading
 import logging
+import asyncio
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
@@ -284,7 +283,6 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 # Инициализация Telegram-бота
 bot_token = "7792029680:AAH1OcE_D-iP_0pQNMGKQzmaWP-d_8HbrZA"
 application = Application.builder().token(bot_token).build()
-dispatcher = application.dispatcher
 
 # Настройка обработчиков
 conv_handler = ConversationHandler(
@@ -297,32 +295,37 @@ conv_handler = ConversationHandler(
     fallbacks=[],
 )
 
-dispatcher.add_handler(conv_handler)
-dispatcher.add_handler(CallbackQueryHandler(take_ticket, pattern="^take_"))
-dispatcher.add_handler(CallbackQueryHandler(finish_dialogue, pattern="^finish_"))
-dispatcher.add_handler(CommandHandler("active_tickets", active_tickets))
-dispatcher.add_handler(CommandHandler("help", help_command))
-dispatcher.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_moderator_message))
-dispatcher.add_handler(MessageHandler(filters.ALL, handle_user_message))
+application.add_handler(conv_handler)
+application.add_handler(CallbackQueryHandler(take_ticket, pattern="^take_"))
+application.add_handler(CallbackQueryHandler(finish_dialogue, pattern="^finish_"))
+application.add_handler(CommandHandler("active_tickets", active_tickets))
+application.add_handler(CommandHandler("help", help_command))
+application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_moderator_message))
+application.add_handler(MessageHandler(filters.ALL, handle_user_message))
 
-# Запуск бота
-def run_bot():
-    init_db()
-    application.run_polling()
-
-threading.Thread(target=run_bot, daemon=True).start()
+# Инициализация базы данных
+init_db()
 
 # Flask-роут для вебхука
 @app.route("/webhook", methods=["POST"])
-def webhook():
+async def webhook():
     update = Update.de_json(request.get_json(force=True), application.bot)
-    dispatcher.process_update(update)
+    await application.process_update(update)
     return "OK"
 
 # Установка вебхука при запуске
 @app.route("/set_webhook", methods=["GET"])
-def set_webhook():
+async def set_webhook():
     webhook_url = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME')}/webhook"
-    application.bot.setWebhook(webhook_url)
-    logger.info(f"Webhook set to {webhook_url}")
-    return "Webhook set"
+    success = await application.bot.set_webhook(webhook_url)
+    if success:
+        logger.info(f"Webhook set to {webhook_url}")
+        return "Webhook set"
+    else:
+        logger.error("Failed to set webhook")
+        return "Failed to set webhook"
+
+# Запуск Flask приложения
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host="0.0.0.0", port=port)
