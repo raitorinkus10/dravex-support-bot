@@ -78,12 +78,12 @@ CHOOSE_MODERATOR, AWAITING_RESPONSE, AWAITING_RATING = range(3)
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user = update.effective_user
     logger.info(f"User {user.id} started the bot")
-    keyboard = [[InlineKeyboardButton("Я не бот", callback_data="verify")]]
+    keyboard = [[InlineKeyboardButton("Подтвердите, что вы не бот", callback_data="verify")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text(
-        f"Привет, {user.first_name}! 👋 Я бот техподдержки **DRΛVΣX Support**.  \n"
-        "Помогу тебе с любыми вопросами! Нажми кнопку ниже, чтобы подтвердить, что ты не бот.  \n"
-        "Затем напиши свой вопрос, и модератор скоро ответит. Когда решишь все вопросы, пожалуйста, нажми кнопку 'Завершить диалог', чтобы закрыть тикет — это поможет нашей администрации не перегружаться. Спасибо! 😊",
+        f"Привет, {user.first_name}! 👋 Я бот техподдержки **DRΛVΣX Support**.\n"
+        "Подтвердите, что вы не бот, нажав на кнопку ниже.\n"
+        "После получения ответа, пожалуйста, завершите чат и оцените работу поддержки.",
         reply_markup=reply_markup,
     )
     return CHOOSE_MODERATOR
@@ -93,7 +93,7 @@ async def verify_user(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     query = update.callback_query
     await query.answer()
     user = update.effective_user
-    ticket_id = create_ticket(user.id, user.username or user.first_name)
+    ticket_id = create_ticket(user.id, user.first_name)
     context.user_data["ticket_id"] = ticket_id
     logger.info(f"User {user.id} verified, ticket {ticket_id} created")
 
@@ -254,7 +254,7 @@ async def handle_rating(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
     await context.bot.send_message(
         chat_id="-1002672157892",
-        text=f"{username} оценил модератора @{moderator_username} на {rating}/5.",
+        text=f"{username} оценил работу @{moderator_username} на {rating} баллов.",
     )
     await query.message.reply_text("Спасибо за оценку! Диалог завершен.")
     logger.info(f"User {username} rated moderator {moderator_username} {rating}/5 for ticket {ticket_id}")
@@ -301,16 +301,16 @@ application = Application.builder().token(bot_token).build()
 conv_handler = ConversationHandler(
     entry_points=[CommandHandler("start", start)],
     states={
-        CHOOSE_MODERATOR: [CallbackQueryHandler(verify_user, pattern="^verify$", per_message=True)],
+        CHOOSE_MODERATOR: [CallbackQueryHandler(verify_user, pattern="^verify$")],
         AWAITING_RESPONSE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_user_message)],
-        AWAITING_RATING: [CallbackQueryHandler(handle_rating, pattern="^rate_", per_message=True)],
+        AWAITING_RATING: [CallbackQueryHandler(handle_rating, pattern="^rate_")],
     },
     fallbacks=[],
 )
 
 application.add_handler(conv_handler)
-application.add_handler(CallbackQueryHandler(take_ticket, pattern="^take_", per_message=True))
-application.add_handler(CallbackQueryHandler(finish_dialogue, pattern="^finish_", per_message=True))
+application.add_handler(CallbackQueryHandler(take_ticket, pattern="^take_"))
+application.add_handler(CallbackQueryHandler(finish_dialogue, pattern="^finish_"))
 application.add_handler(CommandHandler("active_tickets", active_tickets))
 application.add_handler(CommandHandler("help", help_command))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_moderator_message))
