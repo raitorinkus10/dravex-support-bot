@@ -301,16 +301,16 @@ application = Application.builder().token(bot_token).build()
 conv_handler = ConversationHandler(
     entry_points=[CommandHandler("start", start)],
     states={
-        CHOOSE_MODERATOR: [CallbackQueryHandler(verify_user, pattern="^verify$")],
+        CHOOSE_MODERATOR: [CallbackQueryHandler(verify_user, pattern="^verify$", per_message=True)],
         AWAITING_RESPONSE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_user_message)],
-        AWAITING_RATING: [CallbackQueryHandler(handle_rating, pattern="^rate_")],
+        AWAITING_RATING: [CallbackQueryHandler(handle_rating, pattern="^rate_", per_message=True)],
     },
     fallbacks=[],
 )
 
 application.add_handler(conv_handler)
-application.add_handler(CallbackQueryHandler(take_ticket, pattern="^take_"))
-application.add_handler(CallbackQueryHandler(finish_dialogue, pattern="^finish_"))
+application.add_handler(CallbackQueryHandler(take_ticket, pattern="^take_", per_message=True))
+application.add_handler(CallbackQueryHandler(finish_dialogue, pattern="^finish_", per_message=True))
 application.add_handler(CommandHandler("active_tickets", active_tickets))
 application.add_handler(CommandHandler("help", help_command))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_moderator_message))
@@ -333,8 +333,10 @@ def webhook():
         if update is None:
             logger.error("Failed to parse update from webhook data")
             return "Failed to parse update", 400
-        loop = application.loop or asyncio.get_event_loop()
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         loop.run_until_complete(application.process_update(update))
+        loop.close()
         logger.info("Webhook processed successfully")
         return "OK"
     except Exception as e:
@@ -348,8 +350,11 @@ def set_webhook():
     try:
         webhook_url = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME')}/webhook"
         logger.info(f"Setting webhook to {webhook_url}")
-        success = application.bot.set_webhook(webhook_url)
-        if success:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        result = loop.run_until_complete(application.bot.set_webhook(webhook_url))
+        loop.close()
+        if result:
             logger.info(f"Webhook set to {webhook_url}")
             return "Webhook set"
         else:
