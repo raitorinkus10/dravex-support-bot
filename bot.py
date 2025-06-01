@@ -13,6 +13,7 @@ from telegram.ext import (
 import sqlite3
 from uuid import uuid4
 import logging
+import asyncio
 import traceback
 
 # Настройка логирования
@@ -110,6 +111,12 @@ async def verify_user(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
 # Обработка сообщения пользователя
 async def handle_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
+    message_text = update.message.text.lower() if update.message and update.message.text else ""
+    if "vpn" in message_text or "vpn.arturshi.ru" in message_text:
+        logger.warning(f"VPN-related message blocked from user {user.id}: {message_text}")
+        await update.message.reply_text("Сообщения о VPN не разрешены.")
+        return
+
     ticket_id = context.user_data.get("ticket_id")
     if not ticket_id:
         await update.message.reply_text("Начни с команды /start.")
@@ -168,6 +175,12 @@ async def take_ticket(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 # Ответ модератора
 async def handle_moderator_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if str(update.effective_chat.id) != "-1002672157892":
+        return
+
+    message_text = update.message.text.lower() if update.message and update.message.text else ""
+    if "vpn" in message_text or "vpn.arturshi.ru" in message_text:
+        logger.warning(f"VPN-related message blocked from moderator: {message_text}")
+        await update.message.reply_text("Сообщения о VPN не разрешены.")
         return
 
     moderator = update.effective_user
@@ -281,7 +294,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     )
 
 # Инициализация Telegram-бота
-bot_token = "7792029680:AAH1OcE_D-iP_0pQNMGKQzmaWP-d_8HbrZA"
+bot_token = "7792029680:AAGOTtdBmgPj6oJa7INA9pPy95Cqvv7AZJw"
 application = Application.builder().token(bot_token).build()
 
 # Настройка обработчиков
@@ -313,12 +326,13 @@ def webhook():
         logger.info("Received webhook request")
         data = request.get_json(force=True)
         logger.info(f"Webhook data: {data}")
+        if "vpn" in str(data).lower() or "vpn.arturshi.ru" in str(data):
+            logger.warning("VPN-related message detected in webhook data")
+            return "VPN-related content blocked", 403
         update = Update.de_json(data, application.bot)
         if update is None:
             logger.error("Failed to parse update from webhook data")
             return "Failed to parse update", 400
-        # Используем run_async для асинхронной обработки
-        from telegram.ext import ApplicationHandlerStop
         loop = application.loop or asyncio.get_event_loop()
         loop.run_until_complete(application.process_update(update))
         logger.info("Webhook processed successfully")
@@ -334,7 +348,6 @@ def set_webhook():
     try:
         webhook_url = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME')}/webhook"
         logger.info(f"Setting webhook to {webhook_url}")
-        # Используем синхронный вызов для WSGI
         success = application.bot.set_webhook(webhook_url)
         if success:
             logger.info(f"Webhook set to {webhook_url}")
